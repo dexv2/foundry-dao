@@ -26,6 +26,7 @@ contract MyGovernorTest is Test {
 
     uint256 public constant MIN_DELAY = 3600; // 1 hour - after the vote passes
     uint256 public constant VOTING_DELAY = 1; // how many blocks till a vote is active
+    uint256 public VOTING_PERIOD = 50400;
 
     function setUp() public {
         govToken = new GovToken();
@@ -66,6 +67,23 @@ contract MyGovernorTest is Test {
         // 1. Propose to the DAO
         uint256 proposalId = governor.propose(targets, values, callDatas, description);
 
+        /**
+         * 
+         * from IGovernor.sol
+         * 
+         * enum ProposalState {
+         *     Pending,     // 0
+         *     Active,      // 1
+         *     Canceled,    // 2
+         *     Defeated,    // 3
+         *     Succeeded,   // 4
+         *     Queued,      // 5
+         *     Expired,     // 6
+         *     Executed     // 7
+         * }
+         * 
+         */
+
         // View the state
         console.log("Proposal State:", uint256(governor.state(proposalId)));
 
@@ -75,6 +93,40 @@ contract MyGovernorTest is Test {
         console.log("Proposal State:", uint256(governor.state(proposalId)));
 
         // 2. Vote
-        // string memory 
+        string memory reason = "cuz blue frog is cool";
+
+        /**
+         *
+         * from GovernorCountingSimple.sol
+         * 
+         * enum VoteType {
+         *     Against, // 0
+         *     For,     // 1
+         *     Abstain  // 2
+         * }
+         * 
+         */
+
+        uint8 voteWay = 1; // VoteType.for or voting yes
+        vm.prank(USER);
+        governor.castVoteWithReason(proposalId, voteWay, reason);
+
+        vm.warp(block.timestamp + VOTING_PERIOD + 1);
+        vm.roll(block.number + VOTING_PERIOD + 1);
+
+        // 3. Queue th TX
+        bytes32 descriptionHash = keccak256(abi.encodePacked(description));
+        governor.queue(targets, values, callDatas, descriptionHash);
+
+        vm.warp(block.timestamp + MIN_DELAY + 1);
+        vm.roll(block.number + MIN_DELAY + 1);
+
+        console.log("Box value:", box.getNumber());
+
+        // 4. Execute
+        governor.execute(targets, values, callDatas, descriptionHash);
+
+        console.log("Box value:", box.getNumber());
+        assertEq(box.getNumber(), valueToStore);
     }
 }
